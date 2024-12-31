@@ -1,0 +1,146 @@
+---
+title: "Report"
+author: Anusha Srinivasan, Practicum II CS5200- Spring 2024
+date: "17th April, 2024"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r connection, message= FALSE, echo=FALSE, warning=FALSE}
+library(RMySQL)
+library(DBI)
+library(ggplot2)
+library(knitr)
+library(dplyr)
+library(tidyr)
+# Database connection 
+dbname <- 'dbname'  
+host <- 'host'
+username <- 'username'  
+password <- 'password'  
+port <- 
+con <- dbConnect(RMySQL::MySQL(), dbname=dbname, host=host, username=username, password=password, port=port)
+```
+
+# Analytical Query I: Top five sales reps with the most sales broken down by year. 
+```{r top-sales-reps-ranking, echo=FALSE, message=FALSE, comment=NA}
+query1 <- "
+SELECT year, rep_name, SUM(total_amount_sold) AS total_sales
+FROM rep_facts
+GROUP BY year, rep_name
+ORDER BY year, total_sales DESC
+"
+top_reps_data <- dbGetQuery(con, query1)
+
+# Use dplyr to rank reps within each year and select the top five
+top_reps_ranked <- top_reps_data %>%
+  group_by(year) %>%
+  mutate(rank = dense_rank(desc(total_sales))) %>%
+  filter(rank <= 5) %>%
+  ungroup()
+
+# Display the table using kable for each year
+top_reps_by_year <- split(top_reps_ranked, top_reps_ranked$year)
+
+tables <- lapply(names(top_reps_by_year), function(year) {
+  year_data <- top_reps_by_year[[year]]
+  kable(year_data, caption = paste("Top Five Sales Reps for", year), format = "markdown")
+})
+
+# Now print or return the tables
+print(tables)
+```
+# Analytical Query II: Total sales per product per quarter. 
+```{r total-sales-per-product, echo=FALSE, warning=FALSE}
+product_sales_query <- "
+SELECT year, product_name, quarter, SUM(total_amount_sold) AS total_sales
+FROM product_facts
+GROUP BY year, product_name, quarter
+ORDER BY year, product_name, quarter
+"
+product_sales <- dbGetQuery(con, product_sales_query)
+knitr::kable(product_sales, caption = 'Total Sales Per Product Per Quarter by Year')
+product_sales$quarter <- factor(product_sales$quarter, levels = c("Q1", "Q2", "Q3", "Q4"))
+
+# Generate the line plot 
+ggplot(product_sales, aes(x = quarter, y = total_sales, group = product_name, color = product_name)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~year, scales = 'free_x') + 
+  theme_minimal() +
+  labs(title = 'Total Sales Per Product Per Quarter by Year',
+       x = 'Quarter',
+       y = 'Total Sales') +
+  theme(legend.position = "bottom")  
+
+```
+
+# Analytical Query III: Number of units sold per product per region.
+```{r units-per-product-region, echo=FALSE, warning=FALSE}
+#query
+query_units_per_product_region <- "
+SELECT product_name, territory, SUM(total_units_sold) AS total_units
+FROM product_facts
+GROUP BY product_name, territory
+ORDER BY product_name, territory
+"
+
+units_per_product_region <- dbGetQuery(con, query_units_per_product_region)
+#print the table
+kable(units_per_product_region, caption = "Number of Units Sold per Product per Region", 
+      col.names = c("Product Name", "Region", "Total Units"))
+#generate the plot
+ggplot(units_per_product_region, aes(x = product_name, y = total_units, group = territory, color = territory)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Units Sold per Product per Region",
+       x = "Product Name", y = "Units Sold") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+# Analytical Query IV: Average sales per sales rep over the years.
+```{r average-sales, echo=FALSE, eval=FALSE}
+# Analytical Query IV: Average sales per sales rep over the years
+```{r echo=FALSE}
+#Query
+query_avg_sales_per_rep <- "
+SELECT 
+    rep_name, 
+    year, 
+    AVG(average_amount_sold) AS avg_sales_per_year
+FROM 
+    rep_facts 
+GROUP BY 
+    rep_name, 
+    year
+ORDER BY 
+    rep_name, 
+    year;
+"
+
+avg_sales_per_rep <- dbGetQuery(con, query_avg_sales_per_rep)
+avg_sales_per_rep$year <- factor(avg_sales_per_rep$year, levels = sort(unique(avg_sales_per_rep$year)))
+
+# Generating the line plot
+ggplot(avg_sales_per_rep, aes(x = year, y = avg_sales_per_year, group = rep_name, color = rep_name)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "Average Sales per Sales Rep Over the Years",
+       x = "Year", y = "Average Sales per Year") +
+  theme(legend.position = "right") 
+
+# Print the table
+knitr::kable(avg_sales_per_rep, caption = "Average Sales per Sales Rep Over the Years")
+
+```
+
+
+
+```{r disconnect, echo=FALSE, eval=FALSE, message=FALSE}
+# Disconnect from the database
+dbDisconnect(con)
+```
+
+
